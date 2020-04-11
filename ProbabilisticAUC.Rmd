@@ -115,6 +115,6 @@ n <- 10000
 
 # Take a sample of size n of both postive  and negative cases, check if positive has higher predicted value, and take the average of all n cases
 mean(sample(pred_positive, n, replace = TRUE) > sample(pred_negative, n, replace = TRUE))
-
+# AUC: 0.6912
 ```
 So, we are quite close to the actual AUC.
