@@ -1,0 +1,120 @@
+---
+title: "ProbabilisticAUC"
+author: "Magnus Gidlund"
+date: '2020-04-11'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(titanic)
+library(precrec)
+
+```
+
+## Probabilistic AUC
+The Probabilistic interpretation of AUC is: if we choose a random positive case and a random negative case, AUC is the probability that the positive case will be ranked higher. Lets check this out!
+
+## Getting data
+```{r getting_data}
+#Lets us UCLA data set. Build a simple prediction model with "admit" as dependent variable
+df <- read.csv("https://stats.idre.ucla.edu/stat/data/binary.csv")
+
+```
+
+
+## Quick data exploration
+
+```{r}
+df %>% 
+  head()
+```
+
+```{r}
+str(df)
+```
+
+```{r}
+df <- df %>% 
+  mutate(rank = as.factor(rank))
+```
+
+
+```{r}
+df %>% 
+  summarise_each(list(na = ~sum(is.na(.)))) 
+```
+
+No NAs
+
+## Numeric variables
+```{r}
+df %>% 
+  summarise_if(is.numeric, mean)
+```
+
+```{r}
+df %>% 
+  group_by(rank) %>% 
+  summarise(n = n(),
+            avg_admit = mean(admit))
+  
+```
+
+##Simple prediction model
+```{r}
+
+## Skipping train/test split. At this point we are only interested in the characteristics of AUC. 
+model  <- glm(admit ~ .,data  = df, family = binomial)
+
+model %>% 
+  summary()
+
+
+```
+
+```{r}
+df$prediction = predict(model, newdata = df, type="response")
+```
+
+```{r}
+library(precrec)
+precrec_obj <- evalmod(scores = df$prediction, labels = df$admit)
+autoplot(precrec_obj)
+
+
+```
+
+```{r}
+auc(precrec_obj)
+```
+
+AUC is 0.6928.
+
+
+```{r}
+
+# Create to vectors, postive case and negative cases
+
+pred_positive <- df %>%
+   filter(admit == 1) %>% 
+  pull(prediction)
+
+pred_negative <- df %>%
+   filter(admit == 0) %>% 
+  pull(prediction)
+
+
+```
+
+```{r}
+#Set sample size 
+set.seed(1999)
+n <- 10000
+
+# Take a sample of size n of both postive  and negative cases, check if positive has higher predicted value, and take the average of all n cases
+mean(sample(pred_positive, n, replace = TRUE) > sample(pred_negative, n, replace = TRUE))
+
+```
+So, we are quite close to the actual AUC.
