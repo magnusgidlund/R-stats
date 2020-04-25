@@ -5,16 +5,18 @@ date: '2020-04-11'
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, echo=TRUE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE )
 library(tidyverse)
-library(titanic)
 library(precrec)
+
 
 ```
 
 ## Probabilistic AUC
-The Probabilistic interpretation of AUC is: if we choose a random positive case and a random negative case, AUC is the probability that the positive case will be ranked higher. Lets check this out!
+The Probabilistic interpretation of AUC is the probability the model will score a randomly chosen positive class higher than a randomly chosen negative class. Lets check this out!
+
+
 
 ## Getting data
 ```{r getting_data}
@@ -26,22 +28,11 @@ df <- read.csv("https://stats.idre.ucla.edu/stat/data/binary.csv")
 
 ## Quick data exploration
 
-```{r}
-df %>% 
-  head()
-```
-
-```{r}
-str(df)
-```
 
 ```{r}
 df <- df %>% 
   mutate(rank = as.factor(rank))
-```
 
-
-```{r}
 df %>% 
   summarise_each(list(na = ~sum(is.na(.)))) 
 ```
@@ -53,14 +44,8 @@ No NAs
 df %>% 
   summarise_if(is.numeric, mean)
 ```
+We have ~ 30/70 split between positive and negative class (admit).
 
-```{r}
-df %>% 
-  group_by(rank) %>% 
-  summarise(n = n(),
-            avg_admit = mean(admit))
-  
-```
 
 ##Simple prediction model
 ```{r}
@@ -70,27 +55,26 @@ model  <- glm(admit ~ .,data  = df, family = binomial)
 
 model %>% 
   summary()
-
-
 ```
 
+
+
 ```{r}
+#Get fitted values
 df$prediction = predict(model, newdata = df, type="response")
-```
-
-```{r}
+#Check the AUC by using exciting packgae
 library(precrec)
 precrec_obj <- evalmod(scores = df$prediction, labels = df$admit)
-autoplot(precrec_obj)
 
 
-```
 
-```{r}
 auc(precrec_obj)
+
+
 ```
 
 AUC is 0.6928.
+
 
 
 ```{r}
@@ -109,12 +93,89 @@ pred_negative <- df %>%
 ```
 
 ```{r}
+
 #Set sample size 
 set.seed(1999)
 n <- 10000
 
 # Take a sample of size n of both postive  and negative cases, check if positive has higher predicted value, and take the average of all n cases
+
 mean(sample(pred_positive, n, replace = TRUE) > sample(pred_negative, n, replace = TRUE))
-# AUC: 0.6912
+
+
 ```
 So, we are quite close to the actual AUC.
+
+
+
+## Plotting ROC 
+```{r}
+
+## Create a data frame with TPR/FPT and precision 
+threshold <- seq(0, 1, by = 0.01)
+
+## Get the false positive rate 
+false_postitve_rate <- sapply(threshold,
+  function(thresh) {
+    sum(df$prediction >= thresh & df$admit != 1) / sum(df$admit != 1)
+  })
+
+#Recall/true positive rate
+true_positive_rate <- sapply(threshold,
+  function(thresh) {
+    sum(df$prediction >= thresh & df$admit == 1) / sum(df$admit == 1)
+  })
+
+# Get precison
+Precision <-  sapply(threshold,
+                   function(thresh) {
+    sum(df$prediction >= thresh & df$admit == 1) / sum(df$prediction >= thresh)
+  })
+
+
+df_auc <- data.frame("thresh" = threshold,
+                     "TPR" = true_positive_rate,
+                     "FPR" = false_postitve_rate,
+                     "Precison" = Precision)
+
+```
+
+
+
+
+```{r}
+df_auc %>% 
+  ggplot(aes(x = false_postitve_rate, y = true_positive_rate, label = thresh, color = thresh)) +
+  geom_point() +
+  geom_text(check_overlap = TRUE, vjust = -1) +
+  labs(y = "True Positive rate", x = "Fasle Positive Rate")
+  
+```
+
+## Precision/Recall Tradeoff
+```{r}
+df_auc %>% 
+  ggplot(aes(x = true_positive_rate, y = Precision, label = thresh, color = thresh)) +
+  geom_line(aes(group =1 )) +
+  geom_text(check_overlap = TRUE, vjust = -1) +
+  labs(y = "Precision", x = "Recall")
+```
+
+
+## Metrics vs Threshold
+```{r}
+
+df_auc %>% 
+  gather(key, metric, -thresh) %>% 
+  ggplot(aes(x = thresh, y = metric,color = key)) +
+  geom_line() +
+  geom_vline(xintercept = mean(df$admit), linetype = "dashed") +
+  labs(y = "Metric", x = "Threshold")  +
+  theme(legend.position = "top",
+        legend.title = element_blank()) 
+  
+
+  
+  
+```
+
